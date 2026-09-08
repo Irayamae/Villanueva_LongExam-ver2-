@@ -1,8 +1,9 @@
-// lib/screens/detail_screen.dart
+import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/comment.dart';
 import '../models/post.dart';
@@ -24,14 +25,11 @@ class DetailScreen extends StatefulWidget {
   });
 
   @override
-  State<DetailScreen> createState() =>
-      _DetailScreenState();
+  State<DetailScreen> createState() => _DetailScreenState();
 }
 
-class _DetailScreenState
-    extends State<DetailScreen> {
-  final CommentService _commentService =
-      CommentService();
+class _DetailScreenState extends State<DetailScreen> {
+  final CommentService _commentService = CommentService();
 
   final TextEditingController _commentController =
       TextEditingController();
@@ -44,9 +42,19 @@ class _DetailScreenState
   bool _isLoadingComments = true;
   bool _isAddingComment = false;
   bool _isLiked = false;
+
   late int _likeCount;
 
   String? _error;
+
+  String get _likeKey =>
+      'liked_post_${widget.post.id}';
+
+  String get _likeCountKey =>
+      'like_count_post_${widget.post.id}';
+
+  String get _commentKey =>
+    'local_comments_post_${widget.post.id}';
 
   @override
   void initState() {
@@ -54,7 +62,7 @@ class _DetailScreenState
 
     _likeCount = widget.post.likes;
 
-    _loadComments();
+    _loadSavedInteractions();
   }
 
   @override
@@ -64,114 +72,245 @@ class _DetailScreenState
     super.dispose();
   }
 
+  Future<void> _loadSavedInteractions() async {
+  final preferences =
+      await SharedPreferences.getInstance();
+
+  final savedLiked =
+      preferences.getBool(_likeKey);
+
+  final savedLikeCount =
+      preferences.getInt(_likeCountKey);
+
+  debugPrint(
+    'LIKE LOADED: post=${widget.post.id}, '
+    'liked=$savedLiked, count=$savedLikeCount',
+  );
+
+  if (!mounted) {
+    return;
+  }
+
+  setState(() {
+    _isLiked = savedLiked ?? false;
+    _likeCount =
+        savedLikeCount ?? widget.post.likes;
+  });
+
+  await _loadComments();
+}
+
+  Future<List<Comment>> _getSavedComments() async {
+    final preferences =
+        await SharedPreferences.getInstance();
+
+    final savedData =
+        preferences.getString(_commentKey);
+
+    if (savedData == null || savedData.isEmpty) {
+      return [];
+    }
+
+    try {
+      final decoded =
+          jsonDecode(savedData);
+
+      if (decoded is! List) {
+        return [];
+      }
+
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map(Comment.fromJson)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _saveComments(
+    List<Comment> comments,
+  ) async {
+    final preferences =
+        await SharedPreferences.getInstance();
+
+    final data = comments
+        .map((comment) => comment.toJson())
+        .toList();
+
+    await preferences.setString(
+      _commentKey,
+      jsonEncode(data),
+    );
+  }
+
   Future<void> _loadComments() async {
+  if (mounted) {
     setState(() {
       _isLoadingComments = true;
       _error = null;
     });
+  }
 
-    try {
-      final comments =
-          await _commentService
-              .getCommentsByPostId(
-        widget.post.id,
+  final savedComments =
+      await _getSavedComments();
+
+  try {
+    final apiComments =
+        await _commentService.getCommentsByPostId(
+      widget.post.id,
+    );
+
+    final mergedComments =
+        <Comment>[];
+
+    // Keep all locally added comments.
+    mergedComments.addAll(savedComments);
+
+    // Add API comments that are not already
+    // represented by a locally added comment.
+    for (final apiComment in apiComments) {
+      final alreadySaved =
+          savedComments.any(
+        (savedComment) =>
+            savedComment.userId ==
+                apiComment.userId &&
+            savedComment.body.trim() ==
+                apiComment.body.trim(),
       );
 
-      if (!mounted) {
-        return;
+      if (!alreadySaved) {
+        mergedComments.add(apiComment);
       }
+    }
 
-      setState(() {
-        _comments = comments;
-        _isLoadingComments = false;
-      });
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
+    if (!mounted) {
+      return;
+    }
 
-      setState(() {
-        _isLoadingComments = false;
-        _error = e.toString().replaceFirst(
+    setState(() {
+      _comments = mergedComments;
+      _isLoadingComments = false;
+    });
+  } catch (e) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _comments = savedComments;
+      _isLoadingComments = false;
+
+      if (savedComments.isEmpty) {
+        _error = e
+            .toString()
+            .replaceFirst(
               'Exception: ',
               '',
             );
-      });
-    }
-  }
-
-  void _toggleLike() {
-    setState(() {
-      if (_isLiked) {
-        _likeCount--;
-        _isLiked = false;
-      } else {
-        _likeCount++;
-        _isLiked = true;
       }
     });
   }
+}
+
+  Future<void> _toggleLike() async {
+  final preferences =
+      await SharedPreferences.getInstance();
+
+  final newLikedState = !_isLiked;
+
+  final newLikeCount = newLikedState
+      ? _likeCount + 1
+      : (_likeCount > 0 ? _likeCount - 1 : 0);
+
+  await preferences.setBool(
+    _likeKey,
+    newLikedState,
+  );
+
+  await preferences.setInt(
+    _likeCountKey,
+    newLikeCount,
+  );
+
+  if (!mounted) {
+    return;
+  }
+
+  setState(() {
+    _isLiked = newLikedState;
+    _likeCount = newLikeCount;
+  });
+
+  debugPrint(
+    'LIKE SAVED: post=${widget.post.id}, '
+    'liked=$newLikedState, count=$newLikeCount',
+  );
+}
 
   Future<void> _addComment() async {
-    final body =
-        _commentController.text.trim();
+  final body =
+      _commentController.text.trim();
 
-    if (body.isEmpty) {
-      return;
-    }
+  if (body.isEmpty) {
+    return;
+  }
 
-    final user =
-        context.read<AuthProvider>().user;
+  final user =
+      context.read<AuthProvider>().user;
 
-    if (user == null) {
+  if (user == null) {
+    return;
+  }
+
+  setState(() {
+    _isAddingComment = true;
+  });
+
+  try {
+    final comment =
+        await _commentService.addComment(
+      postId: widget.post.id,
+      userId: user.id,
+      body: body,
+    );
+
+    if (!mounted) {
       return;
     }
 
     setState(() {
-      _isAddingComment = true;
+      _comments.insert(0, comment);
+      _commentController.clear();
+      _isAddingComment = false;
     });
 
-    try {
-      final comment =
-          await _commentService.addComment(
-        postId: widget.post.id,
-        userId: user.id,
-        body: body,
-      );
+    // Save the complete local comment list.
+    await _saveComments(_comments);
 
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _comments.insert(0, comment);
-        _commentController.clear();
-        _isAddingComment = false;
-      });
-
-      _scrollToComments();
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      // DummyJSON may return a valid response for
-      // simulated mutations. If the request fails,
-      // we still keep the user informed.
-      setState(() {
-        _isAddingComment = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to add comment: '
-            '${e.toString().replaceFirst('Exception: ', '')}',
-          ),
-        ),
-      );
+    _scrollToComments();
+  } catch (e) {
+    if (!mounted) {
+      return;
     }
+
+    setState(() {
+      _isAddingComment = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Unable to add comment: '
+          '${e.toString().replaceFirst(
+            'Exception: ',
+            '',
+          )}',
+        ),
+      ),
+    );
   }
+}
 
   void _scrollToComments() {
     Future.delayed(
@@ -268,9 +407,7 @@ class _DetailScreenState
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
             Text(
               widget.post.body,
               style: const TextStyle(
@@ -278,9 +415,7 @@ class _DetailScreenState
                 height: 1.5,
               ),
             ),
-
             const SizedBox(height: 18),
-
             Container(
               width: double.infinity,
               height: 160,
@@ -299,9 +434,7 @@ class _DetailScreenState
                     .onSurfaceVariant,
               ),
             ),
-
             const SizedBox(height: 12),
-
             Row(
               children: [
                 Icon(
@@ -321,11 +454,9 @@ class _DetailScreenState
                 ),
               ],
             ),
-
             const Divider(
               height: 24,
             ),
-
             Row(
               children: [
                 Expanded(
@@ -479,9 +610,9 @@ class _DetailScreenState
               size: 48,
             ),
             const SizedBox(height: 10),
-            Text(
+            const Text(
               'Unable to load comments.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -531,25 +662,25 @@ class _DetailScreenState
   }
 
   Widget _buildComment(
-  BuildContext context,
-  Comment comment,
-) {
-  final theme = Theme.of(context);
+    BuildContext context,
+    Comment comment,
+  ) {
+    final theme = Theme.of(context);
 
-  final currentUser =
-      context.read<AuthProvider>().user;
+    final currentUser =
+        context.read<AuthProvider>().user;
 
-  final isCurrentUser =
-      currentUser != null &&
-      comment.userId == currentUser.id;
+    final isCurrentUser =
+        currentUser != null &&
+        comment.userId == currentUser.id;
 
-  final displayName = isCurrentUser
-      ? currentUser.fullName
-      : (comment.userFullName.isEmpty
-          ? comment.username
-          : comment.userFullName);
+    final displayName = isCurrentUser
+        ? currentUser.fullName
+        : (comment.userFullName.isEmpty
+            ? comment.username
+            : comment.userFullName);
 
-  return Padding(
+    return Padding(
       padding: const EdgeInsets.only(
         bottom: 12,
       ),
@@ -562,9 +693,9 @@ class _DetailScreenState
             backgroundColor:
                 theme.colorScheme.secondaryContainer,
             child: Text(
-  displayName.isNotEmpty
-      ? displayName[0].toUpperCase()
-      : '?',
+              displayName.isNotEmpty
+                  ? displayName[0].toUpperCase()
+                  : '?',
               style: TextStyle(
                 color: theme.colorScheme
                     .onSecondaryContainer,
@@ -588,11 +719,11 @@ class _DetailScreenState
                     CrossAxisAlignment.start,
                 children: [
                   Text(
-  displayName,
-  style: const TextStyle(
-    fontWeight: FontWeight.bold,
-  ),
-),
+                    displayName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 5),
                   Text(
                     comment.body,
@@ -639,14 +770,17 @@ class _DetailScreenState
           children: [
             Expanded(
               child: CustomTextFormField(
-  controller: _commentController,
-  label: 'Comment',
-  hintText: 'Write a comment...',
-  prefixIcon: Icons.mode_comment_outlined,
-  keyboardType: TextInputType.multiline,
-  maxLines: 3,
-  textInputAction: TextInputAction.newline,
-),
+                controller: _commentController,
+                label: 'Comment',
+                hintText: 'Write a comment...',
+                prefixIcon:
+                    Icons.mode_comment_outlined,
+                keyboardType:
+                    TextInputType.multiline,
+                maxLines: 3,
+                textInputAction:
+                    TextInputAction.newline,
+              ),
             ),
             const SizedBox(width: 8),
             SizedBox(

@@ -12,10 +12,26 @@ class UserService {
   static const String _userKey = 'logged_in_user';
   static const String _tokenKey = 'access_token';
 
+  static const String _appUsername = 'fitzvillanueva';
+  static const String _appPassword = 'fitz123';
+
+  static const String _apiUsername = 'emilys';
+  static const String _apiPassword = 'emilyspass';
+
   Future<User> login({
     required String username,
     required String password,
   }) async {
+    final isCustomLogin =
+        username == _appUsername &&
+        password == _appPassword;
+
+    final loginUsername =
+        isCustomLogin ? _apiUsername : username;
+
+    final loginPassword =
+        isCustomLogin ? _apiPassword : password;
+
     final response = await http
         .post(
           Uri.parse(authLoginEndpoint),
@@ -23,15 +39,19 @@ class UserService {
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
-            'username': username,
-            'password': password,
+            'username': loginUsername,
+            'password': loginPassword,
             'expiresInMins': 30,
           }),
         )
         .timeout(apiTimeout);
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      final data =
+          jsonDecode(response.body)
+              as Map<String, dynamic>;
+
       final user = User.fromJson(data);
 
       await saveSession(user);
@@ -45,7 +65,8 @@ class UserService {
       final data = jsonDecode(response.body);
 
       if (data is Map<String, dynamic>) {
-        message = data['message']?.toString() ?? message;
+        message =
+            data['message']?.toString() ?? message;
       }
     } catch (_) {}
 
@@ -63,8 +84,11 @@ class UserService {
         )
         .timeout(apiTimeout);
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      final data =
+          jsonDecode(response.body)
+              as Map<String, dynamic>;
 
       return User.fromJson(
         {
@@ -75,12 +99,14 @@ class UserService {
     }
 
     throw Exception(
-      'Failed to retrieve current user: ${response.statusCode}',
+      'Failed to retrieve current user: '
+      '${response.statusCode}',
     );
   }
 
   Future<void> saveSession(User user) async {
-    final preferences = await SharedPreferences.getInstance();
+    final preferences =
+        await SharedPreferences.getInstance();
 
     await preferences.setString(
       _userKey,
@@ -94,16 +120,22 @@ class UserService {
   }
 
   Future<User?> getSavedUser() async {
-    final preferences = await SharedPreferences.getInstance();
+    final preferences =
+        await SharedPreferences.getInstance();
 
-    final savedUser = preferences.getString(_userKey);
+    final savedUser =
+        preferences.getString(_userKey);
 
-    if (savedUser == null || savedUser.isEmpty) {
+    if (savedUser == null ||
+        savedUser.isEmpty) {
       return null;
     }
 
     try {
-      final data = jsonDecode(savedUser) as Map<String, dynamic>;
+      final data =
+          jsonDecode(savedUser)
+              as Map<String, dynamic>;
+
       return User.fromJson(data);
     } catch (_) {
       await clearSession();
@@ -112,12 +144,15 @@ class UserService {
   }
 
   Future<String?> getSavedToken() async {
-    final preferences = await SharedPreferences.getInstance();
+    final preferences =
+        await SharedPreferences.getInstance();
+
     return preferences.getString(_tokenKey);
   }
 
   Future<void> clearSession() async {
-    final preferences = await SharedPreferences.getInstance();
+    final preferences =
+        await SharedPreferences.getInstance();
 
     await preferences.remove(_userKey);
     await preferences.remove(_tokenKey);

@@ -1,7 +1,6 @@
-// lib/widgets/post_card.dart
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/post.dart';
 import 'custom_inkwell_button.dart';
@@ -32,31 +31,83 @@ class _PostCardState extends State<PostCard> {
   late int _likeCount;
   bool _isLiked = false;
 
+  String get _likeKey =>
+      'liked_post_${widget.post.id}';
+
+  String get _likeCountKey =>
+      'like_count_post_${widget.post.id}';
+
   @override
   void initState() {
     super.initState();
+
     _likeCount = widget.post.likes;
+
+    _loadSavedLike();
+  }
+
+  Future<void> _loadSavedLike() async {
+    final preferences =
+        await SharedPreferences.getInstance();
+
+    final savedLiked =
+        preferences.getBool(_likeKey);
+
+    final savedLikeCount =
+        preferences.getInt(_likeCountKey);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLiked = savedLiked ?? false;
+      _likeCount =
+          savedLikeCount ?? widget.post.likes;
+    });
   }
 
   @override
   void didUpdateWidget(covariant PostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.post.id != widget.post.id ||
-        oldWidget.post.likes != widget.post.likes) {
+    if (oldWidget.post.id != widget.post.id) {
       _likeCount = widget.post.likes;
+      _isLiked = false;
+
+      _loadSavedLike();
     }
   }
 
-  void _handleLike() {
+  Future<void> _handleLike() async {
+    final preferences =
+        await SharedPreferences.getInstance();
+
+    final newLikedState = !_isLiked;
+
+    final newLikeCount = newLikedState
+        ? _likeCount + 1
+        : (_likeCount > 0
+            ? _likeCount - 1
+            : 0);
+
+    await preferences.setBool(
+      _likeKey,
+      newLikedState,
+    );
+
+    await preferences.setInt(
+      _likeCountKey,
+      newLikeCount,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      if (_isLiked) {
-        _likeCount--;
-        _isLiked = false;
-      } else {
-        _likeCount++;
-        _isLiked = true;
-      }
+      _isLiked = newLikedState;
+      _likeCount = newLikeCount;
     });
 
     widget.onLike?.call();
@@ -85,9 +136,6 @@ class _PostCardState extends State<PostCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --------------------------------------------------
-              // User header
-              // --------------------------------------------------
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -135,9 +183,6 @@ class _PostCardState extends State<PostCard> {
 
               const SizedBox(height: 12),
 
-              // --------------------------------------------------
-              // Post text
-              // --------------------------------------------------
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -153,14 +198,8 @@ class _PostCardState extends State<PostCard> {
 
               const SizedBox(height: 14),
 
-              // --------------------------------------------------
-              // Placeholder media area
-              // --------------------------------------------------
               _buildMediaPlaceholder(theme),
 
-              // --------------------------------------------------
-              // Reactions
-              // --------------------------------------------------
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -186,8 +225,9 @@ class _PostCardState extends State<PostCard> {
                       '$_likeCount',
                       style: TextStyle(
                         fontSize: 13,
-                        color:
-                            theme.colorScheme.onSurfaceVariant,
+                        color: theme
+                            .colorScheme
+                            .onSurfaceVariant,
                       ),
                     ),
                     const Spacer(),
@@ -195,8 +235,9 @@ class _PostCardState extends State<PostCard> {
                       'Comments',
                       style: TextStyle(
                         fontSize: 13,
-                        color:
-                            theme.colorScheme.onSurfaceVariant,
+                        color: theme
+                            .colorScheme
+                            .onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -205,9 +246,6 @@ class _PostCardState extends State<PostCard> {
 
               const Divider(height: 1),
 
-              // --------------------------------------------------
-              // Action buttons
-              // --------------------------------------------------
               Row(
                 children: [
                   CustomInkWellButton(

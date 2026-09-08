@@ -28,20 +28,26 @@ class User {
   });
 
   String get fullName {
-  if (username == 'emilys') {
-    return 'Alden Tolosa';
+    if (id == 1) {
+      return 'Fitz Villanueva';
+    }
+
+    final name = '$firstName $lastName'.trim();
+
+    if (name.isEmpty) {
+      return username;
+    }
+
+    return name;
   }
-
-  final name = '$firstName $lastName'.trim();
-
-  if (name.isEmpty) {
-    return username;
-  }
-
-  return name;
-}
 
   factory User.fromJson(Map<String, dynamic> json) {
+    final apiUsername =
+        json['username']?.toString() ?? '';
+
+    final isCustomUser =
+        apiUsername == 'emilys';
+
     return User(
       id: (json['id'] as num?)?.toInt() ?? 0,
       firstName: json['firstName']?.toString() ?? '',
@@ -49,9 +55,13 @@ class User {
       maidenName: json['maidenName']?.toString() ?? '',
       age: (json['age'] as num?)?.toInt() ?? 0,
       gender: json['gender']?.toString() ?? '',
-      email: json['email']?.toString() ?? '',
+      email: isCustomUser
+          ? 'fitz.villanueva@gmail.com'
+          : json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
-      username: json['username']?.toString() ?? '',
+      username: isCustomUser
+          ? 'fitzvillanueva'
+          : apiUsername,
       image: json['image']?.toString() ?? '',
       token: json['accessToken']?.toString() ??
           json['token']?.toString() ??

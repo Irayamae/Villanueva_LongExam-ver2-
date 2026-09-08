@@ -48,32 +48,57 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: false,
         actions: [
           if (authProvider.user != null)
-            Padding(
-              padding: const EdgeInsets.only(
-                right: 12,
-              ),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundImage:
-                    authProvider.user!.image.isNotEmpty
-                        ? NetworkImage(
-                            authProvider.user!.image,
-                          )
-                        : null,
-                child:
-                    authProvider.user!.image.isEmpty
-                        ? Text(
-                            authProvider.user!.firstName
-                                .isNotEmpty
-                                ? authProvider
-                                    .user!
-                                    .firstName[0]
-                                    .toUpperCase()
-                                : '?',
-                          )
-                        : null,
+  Padding(
+    padding: const EdgeInsets.only(
+      right: 12,
+    ),
+    child: Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF18202B),
+        border: Border.all(
+          color: Colors.white,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          const Center(
+            child: Icon(
+              Icons.person_rounded,
+              size: 22,
+              color: Colors.white,
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: 11,
+              height: 11,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF4CD964),
+                border: Border.all(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  width: 2,
+                ),
               ),
             ),
+          ),
+        ],
+      ),
+    ),
+  ),
         ],
       ),
       body: IndexedStack(
